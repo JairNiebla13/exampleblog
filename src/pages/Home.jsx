@@ -10,33 +10,50 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../firebase-config";
 import DeleteIcon from "@mui/icons-material/Delete";
+import Paginacion from "./Paginacion";
 
 function Home({ isAuth }) {
   const [postLists, setPostLists] = useState([]);
-  const postsCollectionRef = collection(db, "posts");
+  const postsPerPage = 5;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPosts, setTotalPosts] = useState(0);
+
+  const fetchPosts = async () => {
+    const postsCollectionRef = collection(db, "posts");
+    const q = query(postsCollectionRef, orderBy("timestamp", "desc"));
+
+    const data = await getDocs(q);
+    setPostLists(data.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
+    setTotalPosts(data.docs.length);
+  };
 
   useEffect(() => {
-    const getPosts = async () => {
-      const q = query(
-        postsCollectionRef,
-        orderBy("timestamp", "desc"),
-        limit(5)
-      );
-      const data = await getDocs(q);
-      setPostLists(data.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
+    fetchPosts();
+    const getTotalPosts = async () => {
+      const allPosts = await getDocs(collection(db, "posts"));
+      setTotalPosts(allPosts.size);
     };
-    getPosts();
-  }, []);
+    getTotalPosts();
+  }, [currentPage]);
 
   const deletePost = async (id) => {
     const postDoc = doc(db, "posts", id);
     await deleteDoc(postDoc);
+    // Después de eliminar, volvemos a cargar las publicaciones
+    fetchPosts();
+    setCurrentPage(Math.ceil(postLists / 5));
   };
-  
+
+  const renderPostsForCurrentPage = () => {
+    const startIndex = (currentPage - 1) * postsPerPage;
+    const endIndex = startIndex + postsPerPage;
+    return postLists.slice(startIndex, endIndex);
+  };
+
   return (
     <div className="homePage">
       {" "}
-      {postLists.map((post) => {
+      {renderPostsForCurrentPage().map((post) => {
         return (
           <div className="post" key={post.id}>
             <div className="postHeader">
@@ -60,6 +77,12 @@ function Home({ isAuth }) {
           </div>
         );
       })}{" "}
+      <Paginacion
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        totalPosts={totalPosts}
+        postsPerPage={postsPerPage}
+      />
     </div>
   );
 }
